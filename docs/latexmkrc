@@ -1,0 +1,21 @@
+# pdfLaTeX, not XeLaTeX (T2A + tempora carry the Cyrillic).
+$pdf_mode = 1;
+$bibtex_use = 2;
+$out_dir = 'build';
+$clean_ext = 'bbl nav out snm synctex.gz run.xml';
+
+# Because $out_dir is build/, bibtex runs with build/ as its working directory.
+# A bare `references.bib` is then resolved through the TeX distribution's file
+# database and can silently pick up an unrelated references.bib shipped by an
+# installed package. The failure mode is nasty: no error, zero entries, an empty
+# bibliography and "Citation undefined" for everything. Observed on this machine,
+# where it resolved to a package copy under the user's MiKTeX tree.
+# Putting the source directory first in BIBINPUTS fixes it. The entry is the
+# RELATIVE path '..', not an absolute one: bibtex runs with build/ as its working
+# directory, so '..' is the source directory, and a relative path survives shells
+# whose idea of an absolute path differs from the TeX distribution's (a Windows
+# MiKTeX cannot use a /d/GitHub/... style path, which is what getcwd() returns
+# under Git Bash). The trailing separator is deliberate: kpathsea reads it as
+# "then the default search path".
+my $path_sep = ($^O =~ /MSWin32|cygwin|msys/i) ? ';' : ':';
+$ENV{'BIBINPUTS'} = '..' . $path_sep . ($ENV{'BIBINPUTS'} // '');
