@@ -11,69 +11,111 @@ they are attacked with metaheuristics: general search strategies that trade the 
 optimality for a bound on running time. Anneal puts several of those strategies behind one
 problem interface, runs them under several parallel execution schemes, and measures what
 each combination actually costs. The point of the project is the measurement: speedup and
-efficiency against thread count, solution quality against a fixed evaluation budget, and a
-profiler-backed account of where the time goes.
+efficiency against thread count, solution quality against a fixed budget, and an honest
+account of where the time goes.
 
-## Goals
+## Zero dependencies
 
-- One problem interface that a metaheuristic can use without knowing which problem it solves.
-- Four metaheuristics behind it: simulated annealing, tabu search, a genetic algorithm, ant
-  colony optimisation.
-- Three parallel execution schemes: independent multi-start, cooperative with a shared best
-  solution, island model with periodic migration.
-- Reproducible runs: a fixed seed and a fixed thread count produce the same result.
-- Benchmarks against published instances (TSPLIB, OR-Library) so results are comparable.
-- A measurement methodology stated before any number is collected, not after.
-
-## Technologies
-
-| Technology | Version or standard | Why |
-|---|---|---|
-| C++ | ISO/IEC 14882:2020 (C++20) | Control over memory layout plus standard concurrency, so measurements reflect the algorithm rather than a runtime under it. |
-| CMake | 3.20 or newer | Presets and multi-target builds; the library builds without the benchmarking dependencies. |
-| `std::jthread`, `std::atomic` | C++20 standard library | Threads whose lifetime is tied to scope, and lock-free update of the shared best solution. |
-| Google Benchmark | 1.8 or newer | Repetition counts, statistics and warmup handling that hand-rolled timing loops get wrong. |
-| GoogleTest | 1.14 or newer | Correctness tests kept separate from timing tests. |
-| Linux `perf` | distribution package | Hardware counters for cache misses and instructions per cycle on the hot path. |
-| TSPLIB, OR-Library | public instance sets | Known optimal or best-known values, so solution quality is a relative gap and not an unscaled number. |
-
-## Architecture
-
-Four layers. The bottom one describes a problem: solution representation, objective
-function, neighbourhood move, and an incremental evaluation of the change a move makes. The
-metaheuristics sit above it and speak only to that interface. The execution schemes drive
-several searches and decide what, if anything, they exchange. The top layer picks an
-instance, a metaheuristic, a scheme and a stopping rule, and writes results in a
-machine-readable form.
-
-```mermaid
-flowchart TD
-    R[Runner: instance, algorithm, scheme, budget] --> S{Execution scheme}
-    S --> MS[Independent multi-start]
-    S --> CO[Cooperative, shared best]
-    S --> IS[Island model, migration]
-    MS --> W[Worker: metaheuristic instance]
-    CO --> W
-    IS --> W
-    W --> P[Problem interface]
-    P --> E[Objective and incremental evaluation]
-    P --> N[Neighbourhood move]
-    CO -.shared best.-> B[(Atomic best solution)]
-    IS -.migration.-> B
-    W --> M[Metrics: time, evaluations, waits]
-    M --> O[Results, machine-readable]
-```
+The whole thing builds with a C++20 compiler and CMake, and nothing else. No package
+manager, no network access at configure time, no vendored archives. The test runner is
+ninety lines in `tests/check.hpp`; the timing harness is `std::chrono::steady_clock`; the
+benchmark instances are generated rather than downloaded. This is not minimalism for its
+own sake: a build that needs a package manager is a build nobody runs, and a measurement
+that needs a download is a measurement nobody repeats.
 
 ## Build
 
+Verified on the machine described in the report: Windows, g++ 15.2.0 (MinGW-w64),
+CMake 4.3.2, Ninja 1.13.2, 12 logical CPUs.
+
 ```bash
-git clone <local path to this repository> anneal-metaheuristics
-cd anneal-metaheuristics
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j
-ctest --test-dir build --output-on-failure
-./build/benchmarks/anneal_bench
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build
 ```
+
+Any generator works; Ninja is just what was used. Release is the default if you do not pass
+`CMAKE_BUILD_TYPE`.
+
+## Run
+
+One command shows the whole system working: four metaheuristics on one instance under one
+time budget, then the best of them across every thread count the machine has, then the three
+parallel schemes side by side, then the instances whose optimum is known.
+
+```bash
+cmake --build build --target demo
+# or directly:
+./build/anneal_demo
+```
+
+Tests, 28 of them, registered individually with CTest:
+
+```bash
+ctest --test-dir build --output-on-failure
+```
+
+The measurement programme. Each sub-command prints the command that produced its table, so
+a number in the report can be traced back to a run:
+
+```bash
+./build/anneal_bench                 # everything, takes a few minutes
+./build/anneal_bench objective       # cost of one objective evaluation
+./build/anneal_bench neighbourhood   # how the 2-opt move is chosen
+./build/anneal_bench falsesharing    # padded against packed per-worker counters
+./build/anneal_bench profile         # time attribution by ablation
+./build/anneal_bench quality         # four algorithms on four instances
+./build/anneal_bench schemes         # the three parallel schemes
+./build/anneal_bench speedup         # thread scan, time to target
+```
+
+## What is implemented
+
+**Problem contract** (`include/anneal/core.hpp`): solution representation, objective,
+incremental evaluation with cached state, neighbourhood operator, construction heuristic,
+recombination, and pheromone hooks. Implemented for three problems:
+
+| Problem | Representation | Move | Known optimum |
+|---|---|---|---|
+| Travelling salesman | permutation | 2-opt over a neighbour list | closed form on circle and grid instances |
+| 0/1 knapsack | 0/1 indicator | flip or swap, repaired | exact, by dynamic programming |
+| Graph colouring | colour per vertex | recolour a conflicting vertex | zero, by planted proper colouring |
+
+**Metaheuristics** (`src/algorithms.cpp`): simulated annealing with three cooling schedules
+and a temperature calibrated from the instance, tabu search with a direct-mapped tabu table
+and an aspiration criterion, a generational genetic algorithm with tournament selection and
+elitism, and ant colony optimisation with candidate lists, evaporation and an elitist
+deposit.
+
+**Parallel schemes** (`src/parallel.cpp`), all on `std::jthread` and `std::atomic`:
+independent multi-start, a cooperative scheme with one shared best solution updated through
+a compare-and-swap loop, and a ring island model with periodic migration through mailboxes.
+Exchange periods are counted in objective evaluations, not iterations, because one iteration
+means a million-per-second for annealing and about a hundred and fifty for an ant colony.
+
+**Measurement harness** (`include/anneal/experiment.hpp`): repeated runs with seed control,
+median and interquartile range over every column, time-to-target distributions with a
+pilot-calibrated target, and per-worker instrumentation for synchronisation time, adopted
+migrants and failed atomic updates.
+
+## Instances
+
+Nothing is downloaded. Every instance is generated, and every stated optimum is either
+proved in closed form or computed exactly:
+
+- **Circle TSP**: points in convex position, so the optimal tour is the hull order and its
+  length is `n · 2R · sin(π/n)`. Not used for comparisons, because the nearest neighbour
+  construction already solves it.
+- **Grid TSP**: `k × k` points, `k` even. No tour edge can be shorter than the spacing, so
+  `n · spacing` is a lower bound, and a tour attaining it exists. The test constructs one.
+- **Knapsack**: uncorrelated integral weights, optimum by dynamic programming, verified
+  against exhaustive enumeration on a 16-item instance.
+- **Graph colouring**: random k-partite graph with a planted k-clique, so a zero-conflict
+  colouring exists by construction and k colours are genuinely needed.
+- **Uniform TSP**: random points. The optimum is **not** known, the class returns NaN, and
+  quality is reported as a tour length rather than a gap.
+
+A TSPLIB reader and writer for the EUC_2D subset is included and tested, so a published
+instance can be dropped in from outside, but no measurement depends on one.
 
 ## Documentation
 
@@ -87,31 +129,39 @@ cd docs
 latexmk -pdf Main.tex   # output: docs/build/Main.pdf
 ```
 
-Unfilled facts are marked with `\TODO{...}`. Find them with:
+`latexmk` exits 0 even when the bibliography silently fails, so check the log rather than the
+exit code:
 
 ```bash
-grep -rn 'TODO' docs/chapters docs/Main.tex docs/references.bib
+grep "You've used" docs/build/Main.blg   # must match the entry count in references.bib
 ```
+
+## Selected results
+
+All measured on the machine above; the full tables and their caveats are in the report.
+
+- Time to a fixed target falls by up to **7.2x at 12 threads**, and is superlinear at two to
+  four threads. That is a property of the heavily skewed time-to-target distribution, not of
+  the machine, and the interquartile range column shows it.
+- The cooperative scheme improves median tour quality by **0.93%** over independent
+  multi-start and costs about **1%** of CPU time in synchronisation. On the knapsack the
+  ordering reverses.
+- Move generation takes **70%** of an annealing iteration; the objective takes under **11%**.
+  The expectation that the objective dominates was wrong.
+- Bounding the 2-opt reversal span, which looked like an optimisation, cost **10.5%** of
+  solution quality.
+- Per-worker counters sharing a cache line are **11 to 15 times** slower than padded ones.
 
 ## Status
 
-- [x] Repository, build documentation scaffold, report skeleton
-- [x] Bibliography of primary sources
-- [ ] Problem interface
-- [ ] Travelling salesman problem instance loader (TSPLIB)
-- [ ] Simulated annealing
-- [ ] Tabu search
-- [ ] Genetic algorithm
-- [ ] Ant colony optimisation
-- [ ] Independent multi-start
-- [ ] Cooperative scheme with shared best solution
-- [ ] Island model
-- [ ] Correctness tests
-- [ ] Benchmark harness
-- [ ] Profiling run and analysis
-- [ ] Results chapter filled from measurements
-
-Nothing in the results chapter is measured yet. Every number in it is a `\TODO`.
+- [x] Problem interface, implemented for three problems
+- [x] Simulated annealing, tabu search, genetic algorithm, ant colony optimisation
+- [x] Independent multi-start, cooperative shared best, island model
+- [x] Instance generators with known optima; TSPLIB EUC_2D reader and writer
+- [x] 28 correctness tests, registered individually with CTest
+- [x] Benchmark harness with seed control and quartile summaries
+- [x] Time attribution by ablation
+- [x] Results chapter filled from measurements
 
 ## License
 
