@@ -131,8 +131,9 @@ void benchmark_neighbourhood() {
     std::printf("Descent accepts only improving moves, so the column is the quality the move\n");
     std::printf("generator can reach on its own, with no metaheuristic on top of it.\n\n");
 
-    const std::vector<int> widths{-30, 10, 14, 12, 14, 12};
-    row({"move generator", "span", "tour length", "improved", "ms", "ns per move"}, widths);
+    const std::vector<int> widths{-30, 8, 14, 11, 14, 10, 12};
+    row({"move generator", "span", "tour length", "improved", "median worse", "ms", "ns per move"},
+        widths);
     rule();
     const int proposals = 2000000;
     for (int n : {1000}) {
@@ -140,7 +141,7 @@ void benchmark_neighbourhood() {
         Rng seed_rng(1);
         const Solution start = reference.construct(seed_rng);
         const double start_cost = reference.evaluate(start);
-        row({"nearest neighbour start", "-", format_number(start_cost, 1), "-", "-", "-"},
+        row({"nearest neighbour start", "-", format_number(start_cost, 1), "-", "-", "-", "-"},
             widths);
 
         struct Setting {
@@ -162,6 +163,12 @@ void benchmark_neighbourhood() {
             Rng rng(1);
             Candidate c = p.make(start);
             int improved = 0;
+            // The size of a rejected move matters as much as the count. Annealing
+            // sets its starting temperature from how bad a typical worsening move
+            // is, so a generator that proposes wilder damage needs a hotter chain
+            // to accept anything, and spends that heat undoing its own proposals.
+            std::vector<double> worse;
+            worse.reserve(static_cast<std::size_t>(proposals));
             const Clock::time_point t0 = Clock::now();
             for (int i = 0; i < proposals; ++i) {
                 const Move m = p.random_move(c, rng);
@@ -169,11 +176,20 @@ void benchmark_neighbourhood() {
                 if (d < 0.0) {
                     p.apply(c, m, d);
                     ++improved;
+                } else {
+                    worse.push_back(d);
                 }
             }
             const double ms = std::chrono::duration<double, std::milli>(Clock::now() - t0).count();
+            double median_worse = 0.0;
+            if (!worse.empty()) {
+                const std::size_t mid = worse.size() / 2;
+                std::nth_element(worse.begin(), worse.begin() + static_cast<std::ptrdiff_t>(mid),
+                                 worse.end());
+                median_worse = worse[mid];
+            }
             row({setting.label, std::to_string(setting.span), format_number(c.cost, 1),
-                 std::to_string(improved), format_number(ms, 0),
+                 std::to_string(improved), format_number(median_worse, 1), format_number(ms, 0),
                  format_number(ms * 1e6 / proposals, 1)},
                 widths);
         }
