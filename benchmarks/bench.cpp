@@ -15,6 +15,7 @@
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
+#include <filesystem>
 #include <fstream>
 #include <string>
 #include <thread>
@@ -427,8 +428,17 @@ void benchmark_berlin52(int repetitions, int budget_ms, const std::string& out_d
     std::printf("Best tour this run: length %s via %s (published optimum 7542).\n",
                 format_number(best_cost, 2).c_str(), best_algorithm.c_str());
 
-    // Persist the measurement and the tour so the report cites a file, not a
-    // remembered number.
+    // Persist only when the caller asks for a writable directory. Exhibit
+    // numbers belong on the author's Windows/Mac machines; cloud-VM timings
+    // must not be pasted into the report.
+    if (!out_dir.empty()) {
+        std::error_code ec;
+        std::filesystem::create_directories(out_dir, ec);
+        if (ec) {
+            std::printf("warning: cannot create %s (%s); skipping save\n", out_dir.c_str(),
+                        ec.message().c_str());
+            return;
+        }
     const std::string measure_path = out_dir + "/berlin52_quality.txt";
     const std::string tour_path = out_dir + "/berlin52_best_tour.txt";
     {
@@ -441,6 +451,7 @@ void benchmark_berlin52(int repetitions, int budget_ms, const std::string& out_d
         out << "# Budget: " << budget_ms << " ms, repetitions: " << repetitions
             << ", threads: 1, scheme: multistart\n";
         out << "# Uniform-random TSP optimum is NOT claimed; it remains NaN.\n";
+        out << "# Do not paste cloud-VM timings into the report as exhibit results.\n";
         out << "published_optimum 7542\n";
         out << "best_found " << format_number(best_cost, 2) << "\n";
         out << "best_algorithm " << best_algorithm << "\n";
@@ -466,6 +477,7 @@ void benchmark_berlin52(int repetitions, int budget_ms, const std::string& out_d
         out << "-1\nEOF\n";
     }
     std::printf("Wrote %s and %s\n", measure_path.c_str(), tour_path.c_str());
+    }
 }
 
 // ---------------------------------------------------------------------------

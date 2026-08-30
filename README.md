@@ -105,9 +105,10 @@ proved in closed form or computed exactly; one published TSPLIB instance is vend
 
 - **berlin52** (TSPLIB, Reinelt 1991): 52 cities, EUC_2D with the library's `nint` convention.
   The known tour length is the **published TSPLIB optimum 7542**, cited from that library — not
-  invented here. Coordinates live in `data/berlin52.tsp`. Measurement against that optimum is
-  `./build/anneal_bench berlin52`, which also writes the run's best tour under
-  `docs/measurements/`.
+  invented here. Coordinates live in `data/berlin52.tsp`. A correctness test checks that the
+  published tour evaluates to 7542. Wall-clock quality runs against berlin52 belong on the
+  author's Windows machine; cloud-VM timings are not exhibit results.
+  `./build/anneal_bench berlin52` is the harness for that measurement when it is taken there.
 - **Circle TSP**: points in convex position, so the optimal tour is the hull order and its
   length is `n · 2R · sin(π/n)`. Not used for comparisons, because the nearest neighbour
   construction already solves it.
