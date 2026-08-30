@@ -27,7 +27,7 @@ that needs a download is a measurement nobody repeats.
 
 Verified on the machine described in the report: Microsoft Windows 11 Pro N
 (version 10.0.26200), AMD Ryzen 5 3600 6-Core Processor (12 logical processors),
-g++ 15.2.0 MinGW, CMake 4.3.2, Ninja 1.13.2. SIMD was not used for these measurements.
+g++ 15.2.0 MinGW, CMake 4.3.2, Ninja 1.13.2.
 
 ```bash
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
@@ -109,7 +109,7 @@ proved in closed form or computed exactly; one published TSPLIB instance is vend
   invented here. Coordinates live in `data/berlin52.tsp`. A correctness test checks that the
   published tour evaluates to 7542. Wall-clock quality was measured on 2026-08-30
   (Microsoft Windows 11 Pro N, version 10.0.26200; AMD Ryzen 5 3600 6-Core Processor,
-  12 logical processors; g++ 15.2.0 MinGW, CMake 4.3.2, Ninja 1.13.2; SIMD not used) with
+  12 logical processors; g++ 15.2.0 MinGW, CMake 4.3.2, Ninja 1.13.2) with
   `.\build\anneal_bench berlin52` only (250 ms, 11 seeds, 1 thread, multistart).
   Files: `docs/measurements/berlin52_quality.txt` and `docs/measurements/berlin52_best_tour.txt`.
   Annealing attained 7542 on all 11 seeds; tabu worst 8035, genetic worst 8039, aco worst 8138.
