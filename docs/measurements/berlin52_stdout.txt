@@ -1,0 +1,22 @@
+anneal_bench: 4 logical CPUs, std::chrono::steady_clock
+
+----------------------------------------------------------------------------------------
+TSPLIB berlin52 against the published optimum 7542
+----------------------------------------------------------------------------------------
+Command: anneal_bench berlin52
+Published optimum: 7542 (Reinelt, TSPLIB, ORSA J. Computing 3(4):376-384,
+1991), EUC_2D nint distances. Coordinates: data/berlin52.tsp.
+Budget 250 ms, 11 seeds, 1 thread, multistart. Uniform random is not measured
+here: its optimum remains unknown (NaN).
+
+algorithm              best          median           worst      median gap   median evals  
+----------------------------------------------------------------------------------------
+annealing           7542.00         7542.00         7542.00         0.000 %        6480271  
+tabu                7542.00         7542.00         7944.00         0.000 %        8560561  
+genetic             7542.00         7865.00         8039.00         4.283 %         891054  
+aco                 7543.00         7703.00         8138.00         2.135 %         111073  
+----------------------------------------------------------------------------------------
+Best tour this run: length 7542.00 via annealing (published optimum 7542).
+Wrote docs/measurements/berlin52_quality.txt and docs/measurements/berlin52_best_tour.txt
+
+sink = 0 (printed so the timed loops cannot be optimised away)

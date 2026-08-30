@@ -59,7 +59,8 @@ perf.data.old
 *.vtune
 *.qdrep
 
-# Benchmark instance sets are downloaded from TSPLIB and OR-Library, not vendored.
+# Vendored published instances (e.g. data/berlin52.tsp) are kept in-tree.
+# Large downloaded archives, if any, would go under data/instances/ and stay untracked.
 data/instances/
 
 # --- Editors and OS --------------------------------------------------------

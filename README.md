@@ -48,7 +48,7 @@ cmake --build build --target demo
 ./build/anneal_demo
 ```
 
-Tests, 28 of them, registered individually with CTest:
+Tests, 29 of them, registered individually with CTest:
 
 ```bash
 ctest --test-dir build --output-on-failure
@@ -63,7 +63,8 @@ a number in the report can be traced back to a run:
 ./build/anneal_bench neighbourhood   # how the 2-opt move is chosen
 ./build/anneal_bench falsesharing    # padded against packed per-worker counters
 ./build/anneal_bench profile         # time attribution by ablation
-./build/anneal_bench quality         # four algorithms on four instances
+./build/anneal_bench quality         # four algorithms on the instances
+./build/anneal_bench berlin52        # TSPLIB berlin52 vs published optimum 7542
 ./build/anneal_bench schemes         # the three parallel schemes
 ./build/anneal_bench speedup         # thread scan, time to target
 ```
@@ -76,7 +77,7 @@ recombination, and pheromone hooks. Implemented for three problems:
 
 | Problem | Representation | Move | Known optimum |
 |---|---|---|---|
-| Travelling salesman | permutation | 2-opt over a neighbour list | closed form on circle and grid instances |
+| Travelling salesman | permutation | 2-opt over a neighbour list | closed form on circle/grid; published TSPLIB 7542 on berlin52; NaN on uniform |
 | 0/1 knapsack | 0/1 indicator | flip or swap, repaired | exact, by dynamic programming |
 | Graph colouring | colour per vertex | recolour a conflicting vertex | zero, by planted proper colouring |
 
@@ -99,9 +100,14 @@ migrants and failed atomic updates.
 
 ## Instances
 
-Nothing is downloaded. Every instance is generated, and every stated optimum is either
-proved in closed form or computed exactly:
+Nothing is downloaded at build or run time. Generated instances keep their stated optima either
+proved in closed form or computed exactly; one published TSPLIB instance is vendored in-tree:
 
+- **berlin52** (TSPLIB, Reinelt 1991): 52 cities, EUC_2D with the library's `nint` convention.
+  The known tour length is the **published TSPLIB optimum 7542**, cited from that library — not
+  invented here. Coordinates live in `data/berlin52.tsp`. Measurement against that optimum is
+  `./build/anneal_bench berlin52`, which also writes the run's best tour under
+  `docs/measurements/`.
 - **Circle TSP**: points in convex position, so the optimal tour is the hull order and its
   length is `n · 2R · sin(π/n)`. Not used for comparisons, because the nearest neighbour
   construction already solves it.
@@ -112,10 +118,10 @@ proved in closed form or computed exactly:
 - **Graph colouring**: random k-partite graph with a planted k-clique, so a zero-conflict
   colouring exists by construction and k colours are genuinely needed.
 - **Uniform TSP**: random points. The optimum is **not** known, the class returns NaN, and
-  quality is reported as a tour length rather than a gap.
+  quality is reported as a tour length rather than a gap. No number is invented for it.
 
-A TSPLIB reader and writer for the EUC_2D subset is included and tested, so a published
-instance can be dropped in from outside, but no measurement depends on one.
+A TSPLIB reader and writer for the EUC_2D subset is included and tested. `att48` is not used:
+its weight type is ATT (pseudo-Euclidean), which this reader refuses.
 
 ## Documentation
 
@@ -157,12 +163,12 @@ All measured on the machine above; the full tables and their caveats are in the 
 - [x] Problem interface, implemented for three problems
 - [x] Simulated annealing, tabu search, genetic algorithm, ant colony optimisation
 - [x] Independent multi-start, cooperative shared best, island model
-- [x] Instance generators with known optima; TSPLIB EUC_2D reader and writer
-- [x] 28 correctness tests, registered individually with CTest
+- [x] Instance generators with known optima; vendored TSPLIB berlin52 (optimum 7542)
+- [x] 29 correctness tests, registered individually with CTest
 - [x] Benchmark harness with seed control and quartile summaries
 - [x] Time attribution by ablation
 - [x] Results chapter filled from measurements
-
+- [x] GitHub Actions cmake + ctest
 ## License
 
 MIT. See [LICENSE](LICENSE).

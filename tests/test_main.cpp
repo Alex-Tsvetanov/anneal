@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <fstream>
 #include <numeric>
 #include <set>
 #include <thread>
@@ -296,7 +297,10 @@ TEST(tsplib_roundtrip_preserves_distances) {
     instance.ys = original.ys();
     const TsplibInstance reparsed = parse_tsplib(write_tsplib(instance));
     CHECK_EQ(reparsed.xs.size(), instance.xs.size());
-    TspProblem rebuilt = tsplib_to_problem(reparsed, original.best_known());
+    // Continuous mode: the round trip is about the coordinates, not about the
+    // TSPLIB nint convention used for published optima.
+    TspProblem rebuilt = tsplib_to_problem(reparsed, original.best_known(),
+                                           Euc2dMode::Continuous);
     Rng rng(2);
     for (int i = 0; i < 40; ++i) {
         const Solution x = original.random_solution(rng);
@@ -305,6 +309,45 @@ TEST(tsplib_roundtrip_preserves_distances) {
         // format does not provide.
         CHECK_NEAR(original.evaluate(x), rebuilt.evaluate(x), 1e-3);
     }
+}
+
+TEST(berlin52_published_optimum_is_attained) {
+    // The known value is the published TSPLIB optimum, not a number invented
+    // in this repository. The tour in data/berlin52.opt.tour is the published
+    // tour; under EUC_2D nint it must evaluate to exactly 7542.
+    TspProblem p = make_berlin52_tsp();
+    CHECK_EQ(p.name(), std::string("berlin52"));
+    CHECK_EQ(p.size(), 52u);
+    CHECK_EQ(p.euc2d_mode(), Euc2dMode::TsplibNint);
+    CHECK_NEAR(p.best_known(), 7542.0, 1e-12);
+
+    // The tour in data/berlin52.opt.tour is the published tour; under EUC_2D
+    // nint it must evaluate to exactly 7542. Read it here rather than invent
+    // a tour that happens to hit the number.
+    std::ifstream tour_file(std::string(ANNEAL_DATA_DIR) + "/berlin52.opt.tour");
+    CHECK_MSG(static_cast<bool>(tour_file), "missing data/berlin52.opt.tour");
+    std::string line;
+    Solution tour;
+    bool in_tour = false;
+    while (std::getline(tour_file, line)) {
+        if (line == "TOUR_SECTION") {
+            in_tour = true;
+            continue;
+        }
+        if (!in_tour) continue;
+        if (line == "-1" || line == "EOF") break;
+        const int city = std::stoi(line);
+        CHECK_MSG(city >= 1 && city <= 52, "tour city out of range");
+        tour.push_back(city - 1);  // TSPLIB is 1-based
+    }
+    CHECK_EQ(tour.size(), 52u);
+    CHECK(p.feasible(tour));
+    CHECK_NEAR(p.evaluate(tour), 7542.0, 1e-9);
+    CHECK_NEAR(p.evaluate_from_coords(tour), 7542.0, 1e-9);
+
+    // Uniform random stays unknown: never invent a number for it.
+    TspProblem uniform = make_uniform_tsp(40, 5);
+    CHECK(std::isnan(uniform.best_known()));
 }
 
 // ---------------------------------------------------------------------------
