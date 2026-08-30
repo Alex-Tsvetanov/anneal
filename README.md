@@ -25,8 +25,9 @@ that needs a download is a measurement nobody repeats.
 
 ## Build
 
-Verified on the machine described in the report: Windows, g++ 15.2.0 (MinGW-w64),
-CMake 4.3.2, Ninja 1.13.2, 12 logical CPUs.
+Verified on the machine described in the report: `alex-pc`, Microsoft Windows 11 Pro N
+(OsVersion 10.0.26200), AMD Ryzen 5 3600 6-Core Processor (12 logical processors),
+g++ 15.2.0 MinGW, CMake 4.3.2, Ninja 1.13.2.
 
 ```bash
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
@@ -106,9 +107,14 @@ proved in closed form or computed exactly; one published TSPLIB instance is vend
 - **berlin52** (TSPLIB, Reinelt 1991): 52 cities, EUC_2D with the library's `nint` convention.
   The known tour length is the **published TSPLIB optimum 7542**, cited from that library — not
   invented here. Coordinates live in `data/berlin52.tsp`. A correctness test checks that the
-  published tour evaluates to 7542. Wall-clock quality runs against berlin52 belong on the
-  author's Windows machine; cloud-VM timings are not exhibit results.
-  `./build/anneal_bench berlin52` is the harness for that measurement when it is taken there.
+  published tour evaluates to 7542. Wall-clock quality was measured on 2026-08-30 on
+  `alex-pc` (Microsoft Windows 11 Pro N, OsVersion 10.0.26200; AMD Ryzen 5 3600 6-Core
+  Processor, 12 logical processors; g++ 15.2.0 MinGW, CMake 4.3.2, Ninja 1.13.2) with
+  `.\build\anneal_bench berlin52` only (250 ms, 11 seeds, 1 thread, multistart).
+  Files: `docs/measurements/berlin52_quality.txt` and `docs/measurements/berlin52_best_tour.txt`.
+  Annealing attained 7542 on all 11 seeds; tabu worst 8035, genetic worst 8039, aco worst 8138.
+  Cloud-VM timings are not exhibit results. Uniform-random TSP remains NaN and was not
+  measured in that run.
 - **Circle TSP**: points in convex position, so the optimal tour is the hull order and its
   length is `n · 2R · sin(π/n)`. Not used for comparisons, because the nearest neighbour
   construction already solves it.
@@ -155,6 +161,10 @@ All measured on the machine above; the full tables and their caveats are in the 
   ordering reverses.
 - Move generation takes **70%** of an annealing iteration; the objective takes under **11%**.
   The expectation that the objective dominates was wrong.
+- On berlin52 (`alex-pc`, 2026-08-30, `.\build\anneal_bench berlin52` only, 250 ms,
+  11 seeds, 1 thread, multistart): annealing attains the published TSPLIB optimum 7542
+  on all 11 seeds; tabu worst 8035, genetic worst 8039, aco worst 8138.
+  Uniform-random TSP remains NaN and was not measured in that run.
 - Bounding the 2-opt reversal span, which looked like an optimisation, cost **10.5%** of
   solution quality.
 - Per-worker counters sharing a cache line are **11 to 15 times** slower than padded ones.

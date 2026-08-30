@@ -1,0 +1,19 @@
+# Measurement: anneal_bench berlin52
+# Instance: berlin52 (TSPLIB, Reinelt 1991)
+# Citation: G. Reinelt, TSPLIB --- A Traveling Salesman Problem Library,
+#           ORSA Journal on Computing, 3(4):376-384, 1991.
+# Published optimum: 7542 (EUC_2D nint convention)
+# Budget: 250 ms, repetitions: 11, threads: 1, scheme: multistart
+# Uniform-random TSP optimum is NOT claimed; it remains NaN.
+# Do not paste cloud-VM timings into the report as exhibit results.
+published_optimum 7542
+best_found 7542.00
+best_algorithm annealing
+relative_gap 0.000000
+best_tour_file berlin52_best_tour.txt
+
+# algorithm best median worst iqr median_gap_pct median_evals
+annealing 7542.00 7542.00 7542.00 0.00 0.000 3068303
+tabu 7542.00 7542.00 8035.00 381.00 0.000 3952561
+genetic 7596.00 7915.00 8039.00 127.00 4.946 454040
+aco 7543.00 7703.00 8138.00 162.00 2.135 74465
