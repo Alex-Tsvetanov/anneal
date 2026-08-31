@@ -7,13 +7,16 @@
 //   ./build/anneal_bench neighbourhood   how the 2-opt move is chosen
 //   ./build/anneal_bench falsesharing    padded against packed counters
 //   ./build/anneal_bench profile         time attribution by ablation
-//   ./build/anneal_bench quality         four algorithms on four instances
+//   ./build/anneal_bench quality         four algorithms on the instances
+//   ./build/anneal_bench berlin52        TSPLIB berlin52 against published 7542
 //   ./build/anneal_bench schemes         the three parallel schemes
 //   ./build/anneal_bench speedup         thread scan, time to target
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
 #include <string>
 #include <thread>
 #include <vector>
@@ -22,6 +25,7 @@
 
 #include "anneal/algorithms.hpp"
 #include "anneal/experiment.hpp"
+#include "anneal/parallel.hpp"
 #include "anneal/problems.hpp"
 #include "anneal/stats.hpp"
 
@@ -303,6 +307,7 @@ void benchmark_profile() {
 
 // ---------------------------------------------------------------------------
 struct Instances {
+    TspProblem berlin52 = make_berlin52_tsp();
     TspProblem uniform = make_uniform_tsp(1000, 20260819);
     TspProblem grid = make_grid_tsp(24, 10.0);
     KnapsackProblem knapsack = make_random_knapsack(400, 20260819);
@@ -315,12 +320,13 @@ void benchmark_quality(int repetitions, int budget_ms) {
     std::printf("Budget %d ms per repetition, %d seeds, independent multi-start with one\n",
                 budget_ms, repetitions);
     std::printf("thread, so this measures the algorithms and not the schemes. The gap is\n");
-    std::printf("relative to the known value where one exists; for graph colouring the known\n");
-    std::printf("value is zero conflicts, so the gap is an absolute count of conflicts.\n\n");
+    std::printf("relative to the known value where one exists; for uniform-1000 the known\n");
+    std::printf("value is NaN (honestly unknown); for berlin52 it is the published TSPLIB\n");
+    std::printf("optimum 7542; for graph colouring the gap is an absolute conflict count.\n\n");
 
     Instances instances;
-    const Problem* problems[] = {&instances.uniform, &instances.grid, &instances.knapsack,
-                                 &instances.coloring};
+    const Problem* problems[] = {&instances.berlin52, &instances.uniform, &instances.grid,
+                                 &instances.knapsack, &instances.coloring};
     const std::vector<int> widths{-18, -11, 14, 14, 14, 13};
     row({"instance", "algorithm", "median", "IQR", "median gap", "median evals"}, widths);
     rule();
@@ -347,6 +353,130 @@ void benchmark_quality(int repetitions, int budget_ms) {
                 widths);
         }
         rule();
+    }
+}
+
+// Measure berlin52 against the published TSPLIB optimum and save the best tour
+// this run actually found. The optimum itself is not computed here.
+void benchmark_berlin52(int repetitions, int budget_ms, const std::string& out_dir) {
+    heading("TSPLIB berlin52 against the published optimum 7542");
+    std::printf("Command: anneal_bench berlin52\n");
+    std::printf("Published optimum: 7542 (Reinelt, TSPLIB, ORSA J. Computing 3(4):376-384,\n");
+    std::printf("1991), EUC_2D nint distances. Coordinates: data/berlin52.tsp.\n");
+    std::printf("Budget %d ms, %d seeds, 1 thread, multistart. Uniform random is not measured\n",
+                budget_ms, repetitions);
+    std::printf("here: its optimum remains unknown (NaN).\n\n");
+
+    TspProblem berlin = make_berlin52_tsp();
+    if (berlin.best_known() != 7542.0) {
+        std::printf("error: make_berlin52_tsp did not carry the published optimum 7542\n");
+        return;
+    }
+
+    const std::vector<int> widths{-11, 14, 14, 14, 14, 13};
+    row({"algorithm", "best", "median", "worst", "median gap", "median evals"}, widths);
+    rule();
+
+    Solution best_tour;
+    double best_cost = kInfinity;
+    std::string best_algorithm;
+
+    struct Row {
+        std::string algorithm;
+        double best = 0;
+        double median = 0;
+        double worst = 0;
+        double iqr = 0;
+        double gap_median = 0;
+        double evals = 0;
+    };
+    std::vector<Row> rows;
+
+    for (const std::string algorithm : {"annealing", "tabu", "genetic", "aco"}) {
+        std::vector<double> displays;
+        std::vector<double> gaps;
+        std::vector<double> evaluations;
+        displays.reserve(static_cast<std::size_t>(repetitions));
+        for (int r = 0; r < repetitions; ++r) {
+            const Factory factory = [&berlin, &algorithm](std::uint64_t seed, int) {
+                return make_algorithm(algorithm, berlin, seed);
+            };
+            Budget budget;
+            budget.wall = std::chrono::milliseconds{budget_ms};
+            const RunResult run =
+                run_scheme("multistart", factory, 1, budget, 900 + static_cast<std::uint64_t>(r));
+            displays.push_back(berlin.display(run.cost));
+            gaps.push_back(relative_gap(run.cost, berlin.best_known()));
+            evaluations.push_back(static_cast<double>(run.evaluations));
+            if (run.cost < best_cost) {
+                best_cost = run.cost;
+                best_tour = run.best;
+                best_algorithm = algorithm;
+            }
+        }
+        const Summary quality = summarise(displays);
+        const Summary gap = summarise(gaps);
+        const double eval_median = summarise(evaluations).median;
+        row({algorithm, format_number(quality.min, 2), format_number(quality.median, 2),
+             format_number(quality.max, 2), gap_cell(gap.median, berlin.best_known()),
+             format_number(eval_median, 0)},
+            widths);
+        rows.push_back(Row{algorithm, quality.min, quality.median, quality.max, quality.iqr(),
+                           gap.median, eval_median});
+    }
+    rule();
+    std::printf("Best tour this run: length %s via %s (published optimum 7542).\n",
+                format_number(best_cost, 2).c_str(), best_algorithm.c_str());
+
+    // Persist only when the caller asks for a writable directory. Exhibit
+    // numbers belong on the author's Windows/Mac machines; cloud-VM timings
+    // must not be pasted into the report.
+    if (!out_dir.empty()) {
+        std::error_code ec;
+        std::filesystem::create_directories(out_dir, ec);
+        if (ec) {
+            std::printf("warning: cannot create %s (%s); skipping save\n", out_dir.c_str(),
+                        ec.message().c_str());
+            return;
+        }
+    const std::string measure_path = out_dir + "/berlin52_quality.txt";
+    const std::string tour_path = out_dir + "/berlin52_best_tour.txt";
+    {
+        std::ofstream out(measure_path);
+        out << "# Measurement: anneal_bench berlin52\n";
+        out << "# Instance: berlin52 (TSPLIB, Reinelt 1991)\n";
+        out << "# Citation: G. Reinelt, TSPLIB --- A Traveling Salesman Problem Library,\n";
+        out << "#           ORSA Journal on Computing, 3(4):376-384, 1991.\n";
+        out << "# Published optimum: 7542 (EUC_2D nint convention)\n";
+        out << "# Budget: " << budget_ms << " ms, repetitions: " << repetitions
+            << ", threads: 1, scheme: multistart\n";
+        out << "# Uniform-random TSP optimum is NOT claimed; it remains NaN.\n";
+        out << "# Do not paste cloud-VM timings into the report as exhibit results.\n";
+        out << "published_optimum 7542\n";
+        out << "best_found " << format_number(best_cost, 2) << "\n";
+        out << "best_algorithm " << best_algorithm << "\n";
+        out << "relative_gap " << format_number(relative_gap(best_cost, 7542.0), 6) << "\n";
+        out << "best_tour_file berlin52_best_tour.txt\n";
+        out << "\n# algorithm best median worst iqr median_gap_pct median_evals\n";
+        for (const Row& r : rows) {
+            out << r.algorithm << " " << format_number(r.best, 2) << " "
+                << format_number(r.median, 2) << " " << format_number(r.worst, 2) << " "
+                << format_number(r.iqr, 2) << " " << format_number(r.gap_median * 100.0, 3)
+                << " " << format_number(r.evals, 0) << "\n";
+        }
+    }
+    {
+        std::ofstream out(tour_path);
+        out << "NAME : berlin52.anneal.tour\n";
+        out << "TYPE : TOUR\n";
+        out << "COMMENT : best tour from anneal_bench berlin52, length "
+            << format_number(best_cost, 2) << " via " << best_algorithm << "\n";
+        out << "DIMENSION : " << best_tour.size() << "\n";
+        out << "TOUR_SECTION\n";
+        for (int city : best_tour) out << (city + 1) << "\n";  // TSPLIB 1-based
+        out << "-1\nEOF\n";
+    }
+    std::printf("Wrote %s and %s\n", measure_path.c_str(), tour_path.c_str());
     }
 }
 
@@ -468,8 +598,8 @@ int main(int argc, char** argv) {
     std::printf("anneal_bench: %u logical CPUs, std::chrono::steady_clock\n", hardware);
 
     const std::vector<std::string> known{"objective", "neighbourhood", "falsesharing",
-                                         "profile",   "quality",       "schemes",
-                                         "speedup"};
+                                         "profile",   "quality",       "berlin52",
+                                         "schemes",   "speedup"};
     const bool all = what == "all";
     if (!all && std::find(known.begin(), known.end(), what) == known.end()) {
         std::printf("unknown sub-command '%s'\ntry: all", what.c_str());
@@ -478,11 +608,16 @@ int main(int argc, char** argv) {
         return 2;
     }
 
+    // Default output directory for saved tours/measurements. Overridable as
+    // the second argument so CI can write into the tree or a scratch folder.
+    const std::string out_dir = argc > 2 ? argv[2] : "docs/measurements";
+
     if (all || what == "objective") benchmark_objective();
     if (all || what == "neighbourhood") benchmark_neighbourhood();
     if (all || what == "falsesharing") benchmark_false_sharing();
     if (all || what == "profile") benchmark_profile();
     if (all || what == "quality") benchmark_quality(11, 250);
+    if (all || what == "berlin52") benchmark_berlin52(11, 250, out_dir);
     if (all || what == "schemes") benchmark_schemes(11, 300);
     if (all || what == "speedup") benchmark_speedup(11);
 

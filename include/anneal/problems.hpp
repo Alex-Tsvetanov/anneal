@@ -16,10 +16,18 @@ namespace anneal {
 // ---------------------------------------------------------------------------
 // Travelling salesman problem, symmetric, Euclidean.
 // ---------------------------------------------------------------------------
+// How Euclidean edge lengths are turned into the numbers the search sees.
+// Continuous is the mathematical length. TsplibNint is the TSPLIB EUC_2D
+// convention: nint(sqrt(dx^2 + dy^2)), which is what every published EUC_2D
+// optimum in that library is stated against. Mixing the two silently is how a
+// "gap to the known optimum" becomes a fiction.
+enum class Euc2dMode { Continuous, TsplibNint };
+
 class TspProblem final : public Problem {
 public:
     TspProblem(std::vector<double> xs, std::vector<double> ys, std::string label,
-               double optimum_tour_length = -1.0);
+               double optimum_tour_length = -1.0,
+               Euc2dMode distance_mode = Euc2dMode::Continuous);
 
     std::string name() const override { return label_; }
     std::size_t size() const override { return n_; }
@@ -62,12 +70,11 @@ public:
         const std::size_t i = static_cast<std::size_t>(a);
         const std::size_t j = static_cast<std::size_t>(b);
         if (use_matrix_) return dist_[i * n_ + j];
-        const double dx = xs_[i] - xs_[j];
-        const double dy = ys_[i] - ys_[j];
-        return std::sqrt(dx * dx + dy * dy);
+        return edge_length(xs_[i] - xs_[j], ys_[i] - ys_[j]);
     }
     void set_distance_mode(bool use_matrix) { use_matrix_ = use_matrix; }
     bool uses_matrix() const { return use_matrix_; }
+    Euc2dMode euc2d_mode() const { return euc2d_mode_; }
     const std::vector<double>& xs() const { return xs_; }
     const std::vector<double>& ys() const { return ys_; }
     // The `candidates` nearest cities to each city, nearest first. Used by the
@@ -84,6 +91,14 @@ public:
     bool candidate_moves() const { return candidate_moves_; }
 
 private:
+    double edge_length(double dx, double dy) const {
+        const double raw = std::sqrt(dx * dx + dy * dy);
+        // TSPLIB95: dij = nint(sqrt(xd*xd + yd*yd)), with nint the nearest
+        // integer. For non-negative arguments that is floor(x + 0.5).
+        if (euc2d_mode_ == Euc2dMode::TsplibNint) return std::floor(raw + 0.5);
+        return raw;
+    }
+
     std::size_t n_;
     std::vector<double> xs_, ys_;
     std::vector<double> dist_;
@@ -92,6 +107,7 @@ private:
     std::size_t span_ = 1;
     bool use_matrix_ = true;
     bool candidate_moves_ = true;
+    Euc2dMode euc2d_mode_ = Euc2dMode::Continuous;
     std::string label_;
     double optimum_;
 };
@@ -110,8 +126,13 @@ TspProblem make_circle_tsp(int n, double radius = 100.0);
 // so it is the instance the demo and the benchmarks use.
 TspProblem make_grid_tsp(int k, double spacing = 10.0);
 // Uniform points in a square. No known optimum, and the class reports NaN
-// rather than a guess.
+// rather than a guess. Do not invent a reference length for this instance.
 TspProblem make_uniform_tsp(int n, std::uint64_t seed, double side = 1000.0);
+
+// berlin52 from TSPLIB (Reinelt 1991). Coordinates are the published instance
+// under data/berlin52.tsp; the known tour length is the published TSPLIB
+// optimum 7542, measured under the EUC_2D nint convention. Not generated.
+TspProblem make_berlin52_tsp();
 
 // ---------------------------------------------------------------------------
 // 0/1 knapsack. Maximisation, so evaluate() returns the negated value and

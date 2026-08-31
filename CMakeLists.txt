@@ -30,6 +30,9 @@ add_library(anneal
 target_include_directories(anneal PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_link_libraries(anneal PUBLIC Threads::Threads)
 target_compile_features(anneal PUBLIC cxx_std_20)
+# Absolute path to the in-tree data/ directory so berlin52.tsp is found without
+# a working-directory convention and without downloading anything at build time.
+target_compile_definitions(anneal PUBLIC ANNEAL_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
 
 if(MSVC)
   target_compile_options(anneal PRIVATE /W4 /permissive-)
@@ -63,6 +66,7 @@ set(ANNEAL_TEST_CASES
   tsp_crossover_preserves_permutation
   tsplib_parse_reads_coordinates
   tsplib_roundtrip_preserves_distances
+  berlin52_published_optimum_is_attained
   knapsack_delta_matches_full_evaluation
   knapsack_dp_optimum_matches_brute_force
   knapsack_solution_stays_feasible

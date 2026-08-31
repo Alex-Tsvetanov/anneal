@@ -25,8 +25,9 @@ that needs a download is a measurement nobody repeats.
 
 ## Build
 
-Verified on the machine described in the report: Windows, g++ 15.2.0 (MinGW-w64),
-CMake 4.3.2, Ninja 1.13.2, 12 logical CPUs.
+Verified on the machine described in the report: Microsoft Windows 11 Pro N
+(version 10.0.26200), AMD Ryzen 5 3600 6-Core Processor (12 logical processors),
+g++ 15.2.0 MinGW, CMake 4.3.2, Ninja 1.13.2.
 
 ```bash
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
@@ -48,7 +49,7 @@ cmake --build build --target demo
 ./build/anneal_demo
 ```
 
-Tests, 28 of them, registered individually with CTest:
+Tests, 29 of them, registered individually with CTest:
 
 ```bash
 ctest --test-dir build --output-on-failure
@@ -63,7 +64,8 @@ a number in the report can be traced back to a run:
 ./build/anneal_bench neighbourhood   # how the 2-opt move is chosen
 ./build/anneal_bench falsesharing    # padded against packed per-worker counters
 ./build/anneal_bench profile         # time attribution by ablation
-./build/anneal_bench quality         # four algorithms on four instances
+./build/anneal_bench quality         # four algorithms on the instances
+./build/anneal_bench berlin52        # TSPLIB berlin52 vs published optimum 7542
 ./build/anneal_bench schemes         # the three parallel schemes
 ./build/anneal_bench speedup         # thread scan, time to target
 ```
@@ -76,7 +78,7 @@ recombination, and pheromone hooks. Implemented for three problems:
 
 | Problem | Representation | Move | Known optimum |
 |---|---|---|---|
-| Travelling salesman | permutation | 2-opt over a neighbour list | closed form on circle and grid instances |
+| Travelling salesman | permutation | 2-opt over a neighbour list | closed form on circle/grid; published TSPLIB 7542 on berlin52; NaN on uniform |
 | 0/1 knapsack | 0/1 indicator | flip or swap, repaired | exact, by dynamic programming |
 | Graph colouring | colour per vertex | recolour a conflicting vertex | zero, by planted proper colouring |
 
@@ -99,9 +101,20 @@ migrants and failed atomic updates.
 
 ## Instances
 
-Nothing is downloaded. Every instance is generated, and every stated optimum is either
-proved in closed form or computed exactly:
+Nothing is downloaded at build or run time. Generated instances keep their stated optima either
+proved in closed form or computed exactly; one published TSPLIB instance is vendored in-tree:
 
+- **berlin52** (TSPLIB, Reinelt 1991): 52 cities, EUC_2D with the library's `nint` convention.
+  The known tour length is the **published TSPLIB optimum 7542**, cited from that library — not
+  invented here. Coordinates live in `data/berlin52.tsp`. A correctness test checks that the
+  published tour evaluates to 7542. Wall-clock quality was measured on 2026-08-30
+  (Microsoft Windows 11 Pro N, version 10.0.26200; AMD Ryzen 5 3600 6-Core Processor,
+  12 logical processors; g++ 15.2.0 MinGW, CMake 4.3.2, Ninja 1.13.2) with
+  `.\build\anneal_bench berlin52` only (250 ms, 11 seeds, 1 thread, multistart).
+  Files: `docs/measurements/berlin52_quality.txt` and `docs/measurements/berlin52_best_tour.txt`.
+  Annealing attained 7542 on all 11 seeds; tabu worst 8035, genetic worst 8039, aco worst 8138.
+  Cloud-VM timings are not exhibit results. Uniform-random TSP remains NaN and was not
+  measured in that run.
 - **Circle TSP**: points in convex position, so the optimal tour is the hull order and its
   length is `n · 2R · sin(π/n)`. Not used for comparisons, because the nearest neighbour
   construction already solves it.
@@ -112,10 +125,10 @@ proved in closed form or computed exactly:
 - **Graph colouring**: random k-partite graph with a planted k-clique, so a zero-conflict
   colouring exists by construction and k colours are genuinely needed.
 - **Uniform TSP**: random points. The optimum is **not** known, the class returns NaN, and
-  quality is reported as a tour length rather than a gap.
+  quality is reported as a tour length rather than a gap. No number is invented for it.
 
-A TSPLIB reader and writer for the EUC_2D subset is included and tested, so a published
-instance can be dropped in from outside, but no measurement depends on one.
+A TSPLIB reader and writer for the EUC_2D subset is included and tested. `att48` is not used:
+its weight type is ATT (pseudo-Euclidean), which this reader refuses.
 
 ## Documentation
 
@@ -148,6 +161,10 @@ All measured on the machine above; the full tables and their caveats are in the 
   ordering reverses.
 - Move generation takes **70%** of an annealing iteration; the objective takes under **11%**.
   The expectation that the objective dominates was wrong.
+- On berlin52 (2026-08-30, `.\build\anneal_bench berlin52` only, 250 ms, 11 seeds,
+  1 thread, multistart): annealing attains the published TSPLIB optimum 7542 on all
+  11 seeds; tabu worst 8035, genetic worst 8039, aco worst 8138.
+  Uniform-random TSP remains NaN and was not measured in that run.
 - Bounding the 2-opt reversal span, which looked like an optimisation, cost **10.5%** of
   solution quality.
 - Per-worker counters sharing a cache line are **11 to 15 times** slower than padded ones.
@@ -157,12 +174,12 @@ All measured on the machine above; the full tables and their caveats are in the 
 - [x] Problem interface, implemented for three problems
 - [x] Simulated annealing, tabu search, genetic algorithm, ant colony optimisation
 - [x] Independent multi-start, cooperative shared best, island model
-- [x] Instance generators with known optima; TSPLIB EUC_2D reader and writer
-- [x] 28 correctness tests, registered individually with CTest
+- [x] Instance generators with known optima; vendored TSPLIB berlin52 (optimum 7542)
+- [x] 29 correctness tests, registered individually with CTest
 - [x] Benchmark harness with seed control and quartile summaries
 - [x] Time attribution by ablation
 - [x] Results chapter filled from measurements
-
+- [x] GitHub Actions cmake + ctest
 ## License
 
 MIT. See [LICENSE](LICENSE).

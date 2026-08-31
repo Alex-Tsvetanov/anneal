@@ -1,11 +1,11 @@
 // Minimal TSPLIB reader and writer for the EUC_2D subset.
 //
-// The archive is not vendored and is not fetched at build time, so the demo
-// relies on generated instances. The parser is still here and still tested,
-// because the point of the format is that a reader can drop a downloaded
-// instance next to the binary and measure against a published optimum; the
-// writer exists so the generated instances can be exported in the same format
-// and so the parser can be tested against a round trip.
+// One published instance (berlin52) is vendored under data/ so a measurement
+// against a known optimum does not need the network. The parser stays general
+// so other EUC_2D files can be dropped in the same way. The writer exists so
+// generated instances can be exported and so the parser can be tested against
+// a round trip. ATT and GEO weight types are refused: their published optima
+// are not comparable under Euclidean length.
 #pragma once
 
 #include <string>
@@ -32,6 +32,10 @@ TsplibInstance read_tsplib_file(const std::string& path);
 
 std::string write_tsplib(const TsplibInstance& instance);
 
-TspProblem tsplib_to_problem(const TsplibInstance& instance, double optimum = -1.0);
+// Convert a parsed EUC_2D instance. Pass Euc2dMode::TsplibNint together with
+// a published TSPLIB optimum; Continuous is for round-trip tests of generated
+// instances whose lengths were never integers.
+TspProblem tsplib_to_problem(const TsplibInstance& instance, double optimum = -1.0,
+                             Euc2dMode mode = Euc2dMode::Continuous);
 
 }  // namespace anneal

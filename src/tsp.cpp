@@ -1,10 +1,12 @@
 #include "anneal/problems.hpp"
+#include "anneal/tsplib.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <limits>
 #include <numeric>
 #include <stdexcept>
+#include <string>
 
 namespace anneal {
 
@@ -13,10 +15,11 @@ constexpr double kPi = 3.14159265358979323846;
 }
 
 TspProblem::TspProblem(std::vector<double> xs, std::vector<double> ys, std::string label,
-                       double optimum_tour_length)
+                       double optimum_tour_length, Euc2dMode distance_mode)
     : n_(xs.size()),
       xs_(std::move(xs)),
       ys_(std::move(ys)),
+      euc2d_mode_(distance_mode),
       label_(std::move(label)),
       optimum_(optimum_tour_length > 0.0 ? optimum_tour_length
                                          : std::numeric_limits<double>::quiet_NaN()) {
@@ -27,9 +30,7 @@ TspProblem::TspProblem(std::vector<double> xs, std::vector<double> ys, std::stri
     dist_.resize(n_ * n_);
     for (std::size_t i = 0; i < n_; ++i) {
         for (std::size_t j = 0; j < n_; ++j) {
-            const double dx = xs_[i] - xs_[j];
-            const double dy = ys_[i] - ys_[j];
-            dist_[i * n_ + j] = std::sqrt(dx * dx + dy * dy);
+            dist_[i * n_ + j] = edge_length(xs_[i] - xs_[j], ys_[i] - ys_[j]);
         }
     }
 
@@ -94,9 +95,7 @@ double TspProblem::evaluate_from_coords(const Solution& x) const {
     for (std::size_t i = 0; i < n; ++i) {
         const std::size_t a = static_cast<std::size_t>(x[i]);
         const std::size_t b = static_cast<std::size_t>(x[(i + 1) % n]);
-        const double dx = xs_[a] - xs_[b];
-        const double dy = ys_[a] - ys_[b];
-        total += std::sqrt(dx * dx + dy * dy);
+        total += edge_length(xs_[a] - xs_[b], ys_[a] - ys_[b]);
     }
     return total;
 }
@@ -410,8 +409,26 @@ TspProblem make_uniform_tsp(int n, std::uint64_t seed, double side) {
     }
     // No optimum is passed: the optimal tour of a random uniform instance is
     // not known, and a made up reference value would corrupt every gap in the
-    // results.
+    // results. The class reports NaN; quality is a tour length, not a gap.
     return TspProblem(std::move(xs), std::move(ys), "uniform-" + std::to_string(n));
+}
+
+TspProblem make_berlin52_tsp() {
+    // Published TSPLIB instance berlin52 (Reinelt, ORSA Journal on Computing
+    // 3(4):376–384, 1991). The file under data/berlin52.tsp is the canonical
+    // coordinate list; it is not regenerated. The optimum 7542 is the value
+    // published with that library for EUC_2D (nint) distances — not measured
+    // here, not invented here.
+#ifndef ANNEAL_DATA_DIR
+#error "ANNEAL_DATA_DIR must be set by CMake to the in-tree data/ directory"
+#endif
+    const std::string path = std::string(ANNEAL_DATA_DIR) + "/berlin52.tsp";
+    const TsplibInstance instance = read_tsplib_file(path);
+    if (instance.name != "berlin52" || instance.xs.size() != 52) {
+        throw std::runtime_error("berlin52.tsp is not the expected TSPLIB instance");
+    }
+    constexpr double kPublishedOptimum = 7542.0;
+    return tsplib_to_problem(instance, kPublishedOptimum, Euc2dMode::TsplibNint);
 }
 
 }  // namespace anneal

@@ -100,9 +100,9 @@ std::string write_tsplib(const TsplibInstance& instance) {
     return out.str();
 }
 
-TspProblem tsplib_to_problem(const TsplibInstance& instance, double optimum) {
+TspProblem tsplib_to_problem(const TsplibInstance& instance, double optimum, Euc2dMode mode) {
     return TspProblem(instance.xs, instance.ys,
-                      instance.name.empty() ? "tsplib" : instance.name, optimum);
+                      instance.name.empty() ? "tsplib" : instance.name, optimum, mode);
 }
 
 }  // namespace anneal

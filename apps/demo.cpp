@@ -231,14 +231,17 @@ int main() {
 
     // ------------------------------------------------------------------
     // Part 4. The instances whose optimum is known, so the gap is a real
-    // gap. One generator per problem, nothing downloaded.
+    // gap. Generated instances plus one published TSPLIB instance whose
+    // optimum is cited, not invented. Uniform random is deliberately absent:
+    // its optimum is unknown.
     // ------------------------------------------------------------------
     heading("Part 4. Instances with a known optimum, " + std::to_string(scheme_threads) +
             " threads, 300 ms budget, cooperative");
+    TspProblem berlin52 = make_berlin52_tsp();
     TspProblem grid = make_grid_tsp(24, 10.0);
     KnapsackProblem knapsack = make_random_knapsack(400, 20260819);
     ColoringProblem coloring = make_planted_coloring(150, 8, 0.15, 20260819);
-    const Problem* problems[] = {&grid, &knapsack, &coloring};
+    const Problem* problems[] = {&berlin52, &grid, &knapsack, &coloring};
     const std::vector<int> widths4{-18, -18, 14, 14, 14};
     row({"instance", "unit", "known value", "median found", "median gap"}, widths4);
     rule();
@@ -259,10 +262,11 @@ int main() {
             widths4);
     }
     rule();
-    std::printf("The grid optimum is exact: no tour edge can be shorter than the spacing, and\n");
-    std::printf("a tour attaining that bound exists for an even side. The knapsack optimum is\n");
-    std::printf("exact by dynamic programming over the generated instance. The colouring\n");
-    std::printf("optimum is zero conflicts, reachable because the instance is generated from\n");
-    std::printf("a planted proper colouring, so its gap is reported as an absolute count.\n\n");
+    std::printf("berlin52 optimum 7542 is the published TSPLIB value (Reinelt 1991),\n");
+    std::printf("under the EUC_2D nint distance convention. The grid optimum is exact:\n");
+    std::printf("no tour edge can be shorter than the spacing, and a tour attaining that\n");
+    std::printf("bound exists for an even side. The knapsack optimum is exact by dynamic\n");
+    std::printf("programming. The colouring optimum is zero conflicts by planted colouring.\n");
+    std::printf("uniform-1000 is not here: its optimum is unknown (NaN).\n\n");
     return 0;
 }
